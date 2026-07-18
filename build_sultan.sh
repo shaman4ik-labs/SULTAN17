@@ -52,6 +52,16 @@ case "$1" in
         ;;
 esac
 
+# Tier-2: full /proc/version 1:1 with stock (user@host + timestamp).
+# Mirrors panther sultan.yml L306-308; exported in the SAME shell that
+# invokes make below so they reach the kernel build unconditionally
+# (no workflow scope needed). Values are exact stock — do not change.
+# (Compiler substring is handled cosmetically by native-compiler.sh at
+#  patch time; codegen toolchain here stays GCC.)
+export KBUILD_BUILD_USER="build-user"
+export KBUILD_BUILD_HOST="build-host"
+export KBUILD_BUILD_TIMESTAMP="Wed Jan 28 05:34:14 UTC 2026"
+
 make \
     CROSS_COMPILE="$TOOLCPATH/aarch64-linux-" \
     CC="$TOOLCPATH/aarch64-linux-gcc" \
