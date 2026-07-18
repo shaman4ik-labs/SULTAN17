@@ -1,45 +1,29 @@
 name: Build Kernel
-run-name: Build ${{ inputs.target }}
+run-name: Build ${{ inputs.matrix_features }} (${{ github.ref_name }})
 
 on:
   workflow_dispatch:
     inputs:
-      target:
-        description: "Device target"
-        required: true
-        type: choice
-        options:
-          - gs201
-          - zuma
-          - zumapro
-          - all
+      matrix_features:
+        description: "JSON array of variants to build"
+        required: false
+        type: string
+        default: '["resukisu-zeromount"]'
+      publish:
+        description: "Publish release (currently artifact-only; reserved for future use)"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
-  prepare:
-    runs-on: ubuntu-24.04
-
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-
-    steps:
-      - name: Set build matrix
-        id: set-matrix
-        run: |
-          if [ "${{ inputs.target }}" = "all" ]; then
-            echo 'matrix=["gs201","zuma","zumapro"]' >> "$GITHUB_OUTPUT"
-          else
-            echo 'matrix=["${{ inputs.target }}"]' >> "$GITHUB_OUTPUT"
-          fi
-
   build:
-    needs: prepare
-
     runs-on: ubuntu-24.04
 
     strategy:
       fail-fast: false
       matrix:
-        target: ${{ fromJson(needs.prepare.outputs.matrix) }}
+        target: [gs201, zuma, zumapro]
+        variant: ${{ fromJSON(inputs.matrix_features) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -58,7 +42,8 @@ jobs:
             unzip \
             curl \
             git \
-            patch
+            patch \
+            python3
 
       - name: Configure Git
         run: |
@@ -68,10 +53,11 @@ jobs:
         run: |
           chmod +x patch_sultan.sh
           chmod +x build_sultan.sh
+          chmod +x zeromount/build-helpers/*.sh
 
       - name: Patch kernel
         run: |
-          ./patch_sultan.sh ${{ matrix.target }}
+          ./patch_sultan.sh ${{ matrix.target }} ${{ matrix.variant }}
 
       - name: Build kernel
         run: |
@@ -80,6 +66,37 @@ jobs:
       - name: Upload ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: SULTAN17_KSU_${{ matrix.target }}
+          name: SULTAN17-${{ matrix.target }}-${{ matrix.variant }}
           path: AnyKernel/
           compression-level: 0
+
+      - name: Collect .rej files
+        if: ${{ always() }}
+        id: collect_rej
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          rm -rf rej
+          mkdir -p rej
+          found="false"
+          while IFS= read -r -d '' rej_file; do
+            found="true"
+            rej_rel="${rej_file#./}"
+            mkdir -p "rej/$(dirname "$rej_rel")"
+            cp -f "$rej_file" "rej/$rej_rel"
+            orig="${rej_file%.rej}"
+            if [ -f "$orig" ]; then
+              orig_rel="${orig#./}"
+              mkdir -p "rej/$(dirname "$orig_rel")"
+              cp -f "$orig" "rej/$orig_rel"
+            fi
+          done < <(find . -type f -name '*.rej' -print0)
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+
+      - name: Upload .rej bundle
+        if: ${{ always() && steps.collect_rej.outputs.found == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rej-${{ matrix.target }}-${{ matrix.variant }}
+          path: rej/
