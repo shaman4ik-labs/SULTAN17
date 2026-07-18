@@ -263,6 +263,45 @@ case "$VARIANT" in
         # Preserve upstream SULTAN17 defconfig convention (COMPAT=y for KSU userspace).
         grep -q '^CONFIG_COMPAT=y' "$DEFCONFIG" || echo 'CONFIG_COMPAT=y' >> "$DEFCONFIG"
 
+        echo "== Brand localversion (stock uname 1:1) — native-157 + native-compiler =="
+        # Target uname -r = stock panther CP2A.260705.006:
+        #   6.1.157-android14-11-gbd23337e42e7-ab14791245
+        # NATIVE .157 via UTS_RELEASE override (native-157.sh): hardcode
+        # include/config/kernel.release to the stock string so UTS_RELEASE ->
+        # uname(2), /proc/version, osrelease AND module vermagic all read
+        # 6.1.157 consistently.
+        # SULTAN17 nuance: SUBLEVEL stays 162 (native), so LINUX_VERSION_CODE is
+        # untouched -> version-gated code (mali/wlan) compiles as-is, no shims,
+        # and no runtime susfs spoof (which desynced /proc/version). Only the
+        # cosmetic UTS_RELEASE string is overridden.
+        bash "$HELPERS/native-157.sh" .
+
+        # LINUX_COMPILER override (/proc/version compiler substring -> stock Clang
+        # banner while codegen stays GCC). NO-OP if zeromount/stock-compiler.txt
+        # is a placeholder; content-bearing = applies stock literal.
+        bash "$HELPERS/native-compiler.sh" . "$ORCH/stock-compiler.txt"
+
+        # CONFIG_LOCALVERSION := "" : the stock suffix now lives solely in the
+        # hardcoded kernel.release, so keep the defconfig from appending anything
+        # on top (single source of truth; also strips any -Sultan* branding).
+        if grep -q '^CONFIG_LOCALVERSION=' "$DEFCONFIG"; then
+            sed -i -E 's|^CONFIG_LOCALVERSION=".*"|CONFIG_LOCALVERSION=""|' "$DEFCONFIG"
+        else
+            echo 'CONFIG_LOCALVERSION=""' >> "$DEFCONFIG"
+        fi
+
+        # CONFIG_LOCALVERSION_AUTO OFF — else the git tree appends its own
+        # -g<hash>, breaking the 1:1 match.
+        sed -i -E '/^CONFIG_LOCALVERSION_AUTO=y/d' "$DEFCONFIG"
+        grep -q '^# CONFIG_LOCALVERSION_AUTO is not set' "$DEFCONFIG" \
+            || echo '# CONFIG_LOCALVERSION_AUTO is not set' >> "$DEFCONFIG"
+
+        # setlocalversion: never append the "+" dirty/untagged marker.
+        sed -i '/echo "+"$/d' scripts/setlocalversion || true
+
+        echo "=== uname-branding defconfig lines ==="
+        grep -nE '^CONFIG_LOCALVERSION|LOCALVERSION_AUTO' "$DEFCONFIG" || true
+
         # Skip the generic tail defconfig appends (CONFIG_KSU=y etc.): the fragment
         # already carries the correct KSU/SUSFS set. Also skip the AnyKernel clone
         # at the bottom of this file — done inline here to include the A17 sed.
