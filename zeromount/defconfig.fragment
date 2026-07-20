@@ -40,6 +40,9 @@ CONFIG_KALLSYMS_ALL=y
 # KPROBES + KALLSYMS_ALL are hard deps of Kasumi's kprobe-on-kallsyms
 # bootstrap; KALLSYMS_ALL is already set above (kept adjacent for clarity).
 CONFIG_KPROBES=y
+# CONFIG_KPROBE_EVENTS is not set  # tracefs kprobe-event iface (trace_kprobe.c) uses module-only
+# find_module/MODULE_STATE_COMING -> breaks under MODULES=n. Kasumi uses register_kprobe API, not this.
+
 CONFIG_KASUMI=y
 
 # [susfs]
