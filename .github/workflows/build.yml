@@ -63,6 +63,11 @@ jobs:
         run: |
           ./build_sultan.sh ${{ matrix.target }}
 
+      - name: Report config + Kasumi verify (hard-fail on config-stick regression)
+        if: ${{ always() }}
+        run: |
+          bash zeromount/build-helpers/report-config.sh "$GITHUB_WORKSPACE" android14 6.1
+
       - name: Upload ZIP
         uses: actions/upload-artifact@v4
         with:
@@ -100,4 +105,3 @@ jobs:
         with:
           name: rej-${{ matrix.target }}-${{ matrix.variant }}
           path: rej/
-

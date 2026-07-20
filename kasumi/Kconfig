@@ -5,7 +5,10 @@
 config KASUMI
 	bool "Kasumi root-hiding framework (in-tree obj-y port)"
 	depends on ARM64 && !MODULES
-	depends on KPROBES && KALLSYMS_ALL
+	select KPROBES
+	select KALLSYMS
+	select KALLSYMS_ALL
+	select DEBUG_KERNEL
 	default n
 	help
 	  In-tree obj-y port of Anatdx/Kasumi (upstream: LKM). Provides
@@ -16,6 +19,23 @@ config KASUMI
 	  resolve non-exported kernel symbols. The optional ftrace fallback
 	  layer is auto-gated in-source by CONFIG_DYNAMIC_FTRACE (no build
 	  dependency here — TSR is the primary carrier and needs no ftrace).
+
+	  This entry uses `select` (not `depends on`) for KPROBES /
+	  KALLSYMS / KALLSYMS_ALL / DEBUG_KERNEL because:
+	    * KPROBES in stock arch/Kconfig carries `depends on MODULES`, a
+	      stale legacy restriction. SULTAN17 uses INTEGRATE_MODULES=y
+	      (mutually exclusive with MODULES per kernel/module/Kconfig),
+	      so a plain `depends on KPROBES` would silently drop CONFIG_KASUMI.
+	      arm64 unconditionally builds module.o (arch/arm64/kernel/Makefile
+	      line 37), so module_alloc() — kprobes' only MODULES-adjacent
+	      link-time dependency — exists regardless of CONFIG_MODULES.
+	      `select KPROBES` is therefore safe here.
+	    * KALLSYMS_ALL carries `depends on DEBUG_KERNEL && KALLSYMS`
+	      (init/Kconfig). DEBUG_KERNEL is absent from gs201_defconfig,
+	      so a plain `depends on KALLSYMS_ALL` would also silently drop
+	      CONFIG_KASUMI. `select KALLSYMS_ALL` + `select DEBUG_KERNEL`
+	      forces both on for our build.
+	  See /workspace/kasumi-configstick.md for the full autopsy.
 
 	  Non-stock detection surface: /proc/config.gz reveals CONFIG_KASUMI=y,
 	  System.map exposes kasumi_* symbols (address-taken subset kept under
