@@ -29,6 +29,7 @@ CONFIG_IP_SET_HASH_NETPORT=y
 CONFIG_IP_SET_HASH_NETIFACE=y
 CONFIG_IP_SET_LIST_SET=y
 CONFIG_KALLSYMS=y
+CONFIG_DEBUG_KERNEL=y  # KALLSYMS_ALL depends on this; absent on KSIE-free base -> KASUMI silently dropped
 CONFIG_KALLSYMS_ALL=y
 
 # --- Kasumi (obj-y in-tree port) — recon §2/§4 ---
