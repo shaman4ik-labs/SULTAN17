@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [gs201, zuma, zumapro]
+        target: [gs201]
         variant: ${{ fromJSON(inputs.matrix_features) }}
 
     steps:
@@ -100,3 +100,4 @@ jobs:
         with:
           name: rej-${{ matrix.target }}-${{ matrix.variant }}
           path: rej/
+
