@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Kasumi (Anatdx/Kasumi) — obj-y in-tree port
+
+config KASUMI
+	bool "Kasumi root-hiding framework (in-tree obj-y port)"
+	depends on ARM64 && !MODULES
+	depends on KPROBES && KALLSYMS_ALL
+	default n
+	help
+	  In-tree obj-y port of Anatdx/Kasumi (upstream: LKM). Provides
+	  syscall-table TSR + ftrace/kretprobe hook stack for mount /
+	  getattr / dents / xattr concealment on Android.
+
+	  Bootstraps at late_initcall via kprobe-on-kallsyms_lookup_name to
+	  resolve non-exported kernel symbols. The optional ftrace fallback
+	  layer is auto-gated in-source by CONFIG_DYNAMIC_FTRACE (no build
+	  dependency here — TSR is the primary carrier and needs no ftrace).
+
+	  Non-stock detection surface: /proc/config.gz reveals CONFIG_KASUMI=y,
+	  System.map exposes kasumi_* symbols (address-taken subset kept under
+	  GCC-LTO). See /workspace/kasumi-recon.md §5-6 for symbol/API audit.
+
+	  Say N unless you know exactly what this is.

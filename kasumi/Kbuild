@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Kasumi — obj-y in-tree port (upstream: github.com/Anatdx/Kasumi @ 3389732f)
+#
+# Upstream ships as an out-of-tree LKM (obj-m kasumi_lkm.o). SULTAN17 has
+# CONFIG_MODULES=n / CONFIG_INTEGRATE_MODULES=y (monolithic), so we link
+# statically as obj-y. Entry: late_initcall(kasumi_lkm_init) via kasumi_main.c.
+#
+# arm64-only: hooks/arm64/kasumi_patch_memory.o unconditionally included
+# (this kernel is arm64-only — gs201/zuma/zumapro all aarch64).
+
+obj-$(CONFIG_KASUMI) += kasumi_builtin.o
+
+kasumi_builtin-y := \
+	src/kasumi_main.o \
+	src/core/kasumi_bootstrap.o \
+	src/core/kasumi_runtime.o \
+	src/core/kasumi_file_view.o \
+	src/core/kasumi_root_detection.o \
+	src/control/kasumi_ioctl.o \
+	src/policy/kasumi_path_policy.o \
+	src/overlay/kasumi_overlay.o \
+	src/hooks/kasumi_proc_hooks.o \
+	src/hooks/kasumi_proc_read_hooks.o \
+	src/hooks/kasumi_vfs_hooks.o \
+	src/hooks/kasumi_syscall_redirect.o \
+	src/hooks/kasumi_ftrace_hooks.o \
+	src/hooks/arm64/kasumi_patch_memory.o \
+	src/features/kasumi_uname.o \
+	src/features/kasumi_sop_override.o \
+	src/features/kasumi_dop_override.o \
+	src/features/kasumi_xattr_sid_override.o \
+	src/features/kasumi_iop_override.o \
+	src/features/kasumi_fop_override.o \
+	src/features/kasumi_fake_mountinfo.o \
+	src/features/kasumi_fake_selinuxfs_access.o
+
+ccflags-y += -I$(srctree)/kasumi/src/include
+ccflags-y += -I$(srctree)/kasumi/src/internal
+ccflags-y += -I$(srctree)/kasumi/src/core
+ccflags-y += -I$(srctree)/kasumi/src/control
+ccflags-y += -I$(srctree)/kasumi/src/policy
+ccflags-y += -I$(srctree)/kasumi/src/overlay
+ccflags-y += -I$(srctree)/kasumi/src/hooks
+ccflags-y += -I$(srctree)/kasumi/src/features
+ccflags-y += -Wno-unused-function -Wno-unused-variable

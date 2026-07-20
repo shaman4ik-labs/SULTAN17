@@ -31,6 +31,16 @@ CONFIG_IP_SET_LIST_SET=y
 CONFIG_KALLSYMS=y
 CONFIG_KALLSYMS_ALL=y
 
+# --- Kasumi (obj-y in-tree port) — recon §2/§4 ---
+# CONFIG_KASUMI lives here in [base] on purpose: assemble-defconfig.sh only
+# extracts sections [base], [susfs], [overlayfs], [zram], [kpm]. A private
+# `[kasumi]` section would be silently dropped (this bug just cost us the
+# native_stealth build; see /workspace/kasumi-port.md §Config-stick).
+# KPROBES + KALLSYMS_ALL are hard deps of Kasumi's kprobe-on-kallsyms
+# bootstrap; KALLSYMS_ALL is already set above (kept adjacent for clarity).
+CONFIG_KPROBES=y
+CONFIG_KASUMI=y
+
 # [susfs]
 CONFIG_KSU_SUSFS=y
 CONFIG_KSU_SUSFS_SUS_PATH=y

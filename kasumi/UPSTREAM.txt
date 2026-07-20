@@ -1,0 +1,22 @@
+Upstream: https://github.com/Anatdx/Kasumi
+Commit:   3389732f2276a4859bec11a59a8f781f0f885090
+Date:     2026-06-13 11:03:13 +0800
+Subject:  fix: default all features off until userspace enables them
+
+Vendored files (verbatim, no patches):
+  kasumi/src/       <- upstream src/       (module source: hooks/, core/, control/, features/, include/, internal/, overlay/, policy/, kasumi_main.c)
+  kasumi/Makefile   <- upstream Makefile   (out-of-tree LKM Makefile; obj-m += kasumi_lkm.o)
+  kasumi/envsetup.sh<- upstream envsetup.sh
+  kasumi/scripts/   <- upstream scripts/   (userspace helpers, build-side)
+
+Recon report: /workspace/kasumi-recon.md (workspace-side, not in-tree)
+
+Scope: vendor + recon ONLY. patch_sultan.sh, defconfig.fragment, and
+build_sultan.sh are UNTOUCHED on this branch. NO obj-y rewrap, NO Kbuild
+wiring, NO CONFIG_KASUMI symbol, NO module-machinery rewrap yet. See
+recon report "obj-y port feasibility" and "Suggested next steps"
+sections for the follow-on integration plan.
+
+Note: upstream is out-of-tree LKM. This kernel is monolithic
+(CONFIG_INTEGRATE_MODULES=y / MODULES=n). Wire-up = obj-y port, not
+straight vendor.

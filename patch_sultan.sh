@@ -236,6 +236,14 @@ case "$VARIANT" in
         echo "== 61_ zeromount force-dir-child ioctl (ADD_DIR_CHILD) =="
         bash "$HELPERS/zeromount-force-dir-child.sh" .
 
+        echo "== 62_ vendor-kasumi (obj-y Kbuild/Kconfig wire-up) =="
+        # Injects `obj-$(CONFIG_KASUMI) += kasumi/` into root Kbuild after the
+        # drivers/ anchor and `source "kasumi/Kconfig"` into root Kconfig after
+        # the drivers/Kconfig anchor. kasumi/ subtree is vendored in-branch
+        # (kernel-root sibling of drivers/); the helper only wires it in.
+        # Idempotent; exit-1 on missing anchor. See kasumi-recon §4.
+        bash "$HELPERS/vendor-kasumi.sh" .
+
         echo "== fix-susfs-compat (sublevel-dependent source fixes) =="
         SUBLEVEL="$(awk '/^SUBLEVEL =/{print $3}' Makefile)"
         echo "SUBLEVEL=$SUBLEVEL"
