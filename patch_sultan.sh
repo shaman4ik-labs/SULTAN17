@@ -311,6 +311,13 @@ case "$VARIANT" in
         # SULTAN17 targets Android 17; upstream AnyKernel3 ships supported.versions=16.
         sed -i 's/^supported\.versions=16$/supported.versions=16 17/' AnyKernel/anykernel.sh || true
 
+        # Replace upstream 32-bit ARM tools/busybox with vendored arm64 static.
+        # osm0sis AK3 ships a 32-bit ARM busybox; arm64-only flashers (Pixel 7 /
+        # app-based) abort "Busybox setup failed" before Image is written.
+        echo "== Drop in arm64 static busybox into AnyKernel/tools =="
+        cp "$KERNEL_REPO/zeromount/prebuilt/busybox-arm64" AnyKernel/tools/busybox
+        chmod 755 AnyKernel/tools/busybox
+
         echo "$TARGET $VARIANT done"
         exit 0
         ;;
