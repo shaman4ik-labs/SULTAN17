@@ -1,0 +1,102 @@
+name: Build Kernel (captain self-hosted)
+run-name: Build ${{ inputs.matrix_features }} (${{ github.ref_name }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      matrix_features:
+        description: "JSON array of variants to build"
+        required: false
+        type: string
+        default: '["resukisu-zeromount"]'
+      publish:
+        description: "Publish release (currently artifact-only; reserved for future use)"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: [self-hosted, captain]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [gs201, zuma, zumapro]
+        variant: ${{ fromJSON(inputs.matrix_features) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc \
+            bison \
+            flex \
+            libssl-dev \
+            libelf-dev \
+            cpio \
+            zip \
+            unzip \
+            curl \
+            git \
+            patch \
+            python3
+
+      - name: Configure Git
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Make scripts executable
+        run: |
+          chmod +x patch_sultan.sh
+          chmod +x build_sultan.sh
+          chmod +x zeromount/build-helpers/*.sh
+
+      - name: Patch kernel
+        run: |
+          ./patch_sultan.sh ${{ matrix.target }} ${{ matrix.variant }}
+
+      - name: Build kernel
+        run: |
+          ./build_sultan.sh ${{ matrix.target }}
+
+      - name: Upload ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: SULTAN17-${{ matrix.target }}-${{ matrix.variant }}
+          path: AnyKernel/
+          compression-level: 0
+
+      - name: Collect .rej files
+        if: ${{ always() }}
+        id: collect_rej
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          rm -rf rej
+          mkdir -p rej
+          found="false"
+          while IFS= read -r -d '' rej_file; do
+            found="true"
+            rej_rel="${rej_file#./}"
+            mkdir -p "rej/$(dirname "$rej_rel")"
+            cp -f "$rej_file" "rej/$rej_rel"
+            orig="${rej_file%.rej}"
+            if [ -f "$orig" ]; then
+              orig_rel="${orig#./}"
+              mkdir -p "rej/$(dirname "$orig_rel")"
+              cp -f "$orig" "rej/$orig_rel"
+            fi
+          done < <(find . -type f -name '*.rej' -print0)
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+
+      - name: Upload .rej bundle
+        if: ${{ always() && steps.collect_rej.outputs.found == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rej-${{ matrix.target }}-${{ matrix.variant }}
+          path: rej/
