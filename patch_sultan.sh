@@ -234,7 +234,6 @@ case "$VARIANT" in
                  CONFIG_KSU_SUSFS_SPOOF_UNAME=y CONFIG_KSU_SUSFS_ENABLE_LOG=y CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y \
                  CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y CONFIG_KSU_SUSFS_OPEN_REDIRECT=y \
                  CONFIG_KSU_SUSFS_SUS_MAP=y CONFIG_KSU_SUSFS_SUS_SU=y \
-                 CONFIG_KSU_SUSFS_SUS_KSTAT_REDIRECT=y \
                  CONFIG_TMPFS_XATTR=y CONFIG_TMPFS_POSIX_ACL=y; do
             grep -q "^$c" "$DC" || echo "$c" >> "$DC"
         done
@@ -260,7 +259,14 @@ case "$VARIANT" in
         grep -q "^CONFIG_ZEROMOUNT=y" "$DC" || echo "CONFIG_ZEROMOUNT=y" >> "$DC"
         echo "ZeroMount layer applied ✅"
 
-        echo "$TARGET $VARIANT done (LUMINAIRE + ZEROMOUNT #18)"
+        # ===== native uname/compiler stock spoof (build-time; runtime SPOOF_UNAME is a no-op here) =====
+        # native-157 overrides UTS_RELEASE -> uname/osrelease/proc-version/vermagic all become the
+        # stock 6.1.157 string (SUBLEVEL untouched → version-gated code compiles native). + GCC banner.
+        echo "== native-157 uname + native-compiler (stock 1:1) =="
+        bash "$KERNEL_REPO/zeromount/build-helpers/native-157.sh" "$KERNEL_REPO" || { echo "FATAL native-157"; exit 1; }
+        bash "$KERNEL_REPO/zeromount/build-helpers/native-compiler.sh" "$KERNEL_REPO" "$KERNEL_REPO/zeromount/stock-compiler.txt" || echo "native-compiler failed (non-fatal)"
+
+        echo "$TARGET $VARIANT done (LUMINAIRE + ZEROMOUNT + native-157 #24)"
         ;;
 esac
 
