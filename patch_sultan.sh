@@ -182,144 +182,49 @@ case "$VARIANT" in
 	echo "$TARGET $VARIANT done"
         ;;
     resukisu-zeromount)
-        # ---- ZeroMount + ReSukiSU (susfs v2.0.0 + ZeroMount VFS) ----
-        # Mirrors Sultan_KernelSU_SUSFS/.github/workflows/sultan.yml (zeromount-panther)
-        # step "Integrate ReSukiSU + apply susfs/zeromount patches" for feature
-        # `resukisu-zeromount`, adapted for SULTAN17's fs/namespace.c include drift.
-        AV="android14"
-        KV="6.1"
-        KSU_DIR="KernelSU"
-
+        # ===== MINIMAL FIRST BUILD (Option A) — pure ReSukiSU v4.1.0 + susfs 2.2.0 =====
+        # NOTHING of ours (no ZeroMount / stealth / gestures / uname spoof). Goal:
+        # prove the AUTHORS' base compiles + boots + gives WORKING Inline hook + root
+        # = Luminaire's base. Then re-add layer by layer: ZeroMount -> stealth ->
+        # gestures -> uname. Hook = CONFIG_KSU_SUSFS ("SUSFS Inline Hook" in ReSukiSU
+        # = Luminaire's "Hook type: Inline"), NOT the default tracepoint.
+        AV="android14"; KV="6.1"; KSU_DIR="KernelSU"
         cd "$KERNEL_REPO"
 
-        echo "== ReSukiSU setup (pinned) =="
-        # setup.sh from ReSukiSU/main (branch susfs-ksud); pin AFTER integration.
+        echo "== ReSukiSU setup (clones ReSukiSU repo -> KernelSU/; its OWN hook) =="
         curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s susfs-ksud
-        if [ ! -d "$KSU_DIR" ]; then
-            echo "FATAL: ReSukiSU setup did not create $KSU_DIR"; exit 1
-        fi
-        PIN="$(cat "$ORCH/resukisu-pin.txt")"
-        ( cd "$KSU_DIR" && git fetch origin && git checkout "$PIN" )
-        echo "ReSukiSU pinned to $PIN"
+        if [ ! -d "$KSU_DIR" ]; then echo "FATAL: ReSukiSU setup failed"; exit 1; fi
+        ( cd "$KSU_DIR" && git fetch --tags origin && git checkout 0d27e685cb9f1b873cd334371c0d8b6ea4c3aea9 )
+        echo "ReSukiSU pinned to v4.1.0 (0d27e685) = Luminaire's version"
 
-        echo "== Preflight fixers (SULTAN17 tree adjustments BEFORE 50_) =="
-        # SULTAN17 has an extra `#include <trace/hooks/blk.h>` after `internal.h`
-        # in fs/namespace.c which breaks 50_ Hunk#1's anchor. Relocate it above
-        # the "pnode.h"/"internal.h" group (semantically neutral) so 50_ applies.
-        bash "$HELPERS/fix-sultan17-namespace-includes.sh" fs/namespace.c
+        echo "== susfs 2.2.0 (upstream simonpunk + Ante0 tree-fix recipe, reject-tolerant) =="
+        git clone https://gitlab.com/simonpunk/susfs4ksu -b gki-android14-6.1 --depth=1
+        cp "$KERNEL_REPO"/susfs4ksu/kernel_patches/fs/* "$KERNEL_REPO"/fs/
+        cp "$KERNEL_REPO"/susfs4ksu/kernel_patches/include/linux/* "$KERNEL_REPO"/include/linux/
+        patch -p1 -F3 --no-backup-if-mismatch < "$KERNEL_REPO"/susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch || echo "50_ hunks failed (expected)"
+        ( cd "$KSU_DIR" && { patch -p1 -F3 --no-backup-if-mismatch < "$KERNEL_REPO"/susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || echo "10_enable hunks failed (expected)"; } )
+        patch -p1 < "$KERNEL_REPO"/kernel_patches/sultan/fixer.patch || true
+        for p in fix_Kbuild fix_init.c fix_kernel_umount.c; do
+            patch -p1 -F3 --no-backup-if-mismatch < "$KERNEL_REPO"/kernel_patches/next/susfs_fix_patches/v2.2.0/$p.patch || true
+        done
+        patch -p1 < "$KERNEL_REPO"/kernel_patches/common/unicode_bypass_fix_6.1+.patch || true
 
-        echo "== Apply 50_ (susfs base, in tree root) =="
-        patch -p1 -F3 --no-backup-if-mismatch < "$PATCHES/50_add_susfs_in_gki-${AV}-${KV}.patch" || true
-        # tensynos-style custom newuname (byte-identical in SULTAN17): 50_ Hunk#3
-        # rejects on kernel/sys.c — resolve the SPOOF_UNAME insertion by hand.
-        bash "$HELPERS/fix-tensynos-newuname.sh" kernel/sys.c
-        rm -f kernel/sys.c.rej
-
-        echo "== Apply 51_ (enhanced susfs) =="
-        patch -p1 -F3 --no-backup-if-mismatch < "$PATCHES/51_enhanced_susfs-${AV}-${KV}.patch" || true
-
-        echo "== Apply 70_ (ReSukiSU supercall safety, in KSU dir) + supercalls massage =="
-        P70="$PATCHES/70_ksu_safety-resukisu-${KV}.patch"
-        ( cd "$KSU_DIR" && { [ -s "$P70" ] && patch -p1 --no-backup-if-mismatch < "$P70" || echo "no 70_ patch needed"; } )
-        # Post-setup supercalls massage: order matters — AFTER 70_ (see CHECKPOINT3).
-        SUPER="drivers/kernelsu/supercalls.c"
-        if [ -f "$SUPER" ]; then
-            sed -i '/ksu_mark_running_process/d' "$SUPER"
-            if grep -q "vzalloc" "$SUPER" && ! head -5 "$SUPER" | grep -q "vmalloc.h"; then
-                sed -i '1a #include <linux/vmalloc.h>' "$SUPER"
-            fi
-        fi
-
-        echo "== Apply 60_ (ZeroMount VFS, in tree root) =="
-        patch -p1 -F3 --no-backup-if-mismatch < "$PATCHES/60_zeromount-${AV}-${KV}.patch" || true
-
-        echo "== 61_ zeromount force-dir-child ioctl (ADD_DIR_CHILD) =="
-        bash "$HELPERS/zeromount-force-dir-child.sh" .
-
-        echo "== fix-susfs-compat (sublevel-dependent source fixes) =="
-        SUBLEVEL="$(awk '/^SUBLEVEL =/{print $3}' Makefile)"
-        echo "SUBLEVEL=$SUBLEVEL"
-        bash "$HELPERS/fix-susfs-compat.sh" . "$SUBLEVEL" "$AV" "$KV" "" || true
-
-        echo "== ksu_file sepolicy stealth (mode from ksu-sepolicy.conf) =="
-        bash "$HELPERS/fix-ksu-sepolicy-stealth.sh" . "$ORCH/ksu-sepolicy.conf"
-
-        echo "== ksu policyload seqno-split stealth (mode from ksu-policyload.conf) =="
-        bash "$HELPERS/fix-ksu-policyload-seqno.sh" . "$ORCH/ksu-policyload.conf"
-
-        echo "== Strict reject gate (CP3 criterion: zero .rej) =="
-        if find . -name '*.rej' | grep -q .; then
-            echo "FATAL: unresolved rejects present:"; find . -name '*.rej'
-            exit 1
-        fi
-        echo "no .rej — clean"
-
-        echo "== Assemble defconfig (base + susfs + overlayfs + ZeroMount) =="
+        echo "== defconfig: KSU + SUSFS Inline Hook, NO ZeroMount/stealth/uname =="
         DEFCONFIG="$KERNEL_REPO/arch/arm64/configs/${TARGET}_defconfig"
-        : > /tmp/frag.dst
-        bash "$HELPERS/assemble-defconfig.sh" "$ORCH/defconfig.fragment" /tmp/frag.dst "$DEFCONFIG" --susfs --overlayfs
-        # ZeroMount is NOT in the fragment (60_ only patched gki_defconfig).
-        grep -q '^CONFIG_ZEROMOUNT=y' "$DEFCONFIG" || echo 'CONFIG_ZEROMOUNT=y' >> "$DEFCONFIG"
-        # Preserve upstream SULTAN17 defconfig convention (COMPAT=y for KSU userspace).
-        grep -q '^CONFIG_COMPAT=y' "$DEFCONFIG" || echo 'CONFIG_COMPAT=y' >> "$DEFCONFIG"
+        add_cfg(){ grep -q "^$1=y" "$DEFCONFIG" || echo "$1=y" >> "$DEFCONFIG"; }
+        add_cfg CONFIG_KSU
+        add_cfg CONFIG_KSU_SUSFS
+        add_cfg CONFIG_KSU_SUSFS_SUS_PATH
+        add_cfg CONFIG_KSU_SUSFS_SUS_MOUNT
+        add_cfg CONFIG_KSU_SUSFS_SUS_KSTAT
+        add_cfg CONFIG_KSU_SUSFS_TRY_UMOUNT
+        add_cfg CONFIG_KSU_SUSFS_SPOOF_UNAME
+        add_cfg CONFIG_KSU_SUSFS_ENABLE_LOG
+        add_cfg CONFIG_KSU_SUSFS_OPEN_REDIRECT
+        add_cfg CONFIG_COMPAT
+        echo "== defconfig KSU/susfs lines =="; grep -E "^CONFIG_KSU" "$DEFCONFIG" | head -20
 
-        echo "== Brand localversion (stock uname 1:1) — native-157 + native-compiler =="
-        # Target uname -r = stock panther CP2A.260705.006:
-        #   6.1.157-android14-11-gbd23337e42e7-ab14791245
-        # NATIVE .157 via UTS_RELEASE override (native-157.sh): hardcode
-        # include/config/kernel.release to the stock string so UTS_RELEASE ->
-        # uname(2), /proc/version, osrelease AND module vermagic all read
-        # 6.1.157 consistently.
-        # SULTAN17 nuance: SUBLEVEL stays 162 (native), so LINUX_VERSION_CODE is
-        # untouched -> version-gated code (mali/wlan) compiles as-is, no shims,
-        # and no runtime susfs spoof (which desynced /proc/version). Only the
-        # cosmetic UTS_RELEASE string is overridden.
-        bash "$HELPERS/native-157.sh" .
-
-        # LINUX_COMPILER override (/proc/version compiler substring -> stock Clang
-        # banner while codegen stays GCC). NO-OP if zeromount/stock-compiler.txt
-        # is a placeholder; content-bearing = applies stock literal.
-        bash "$HELPERS/native-compiler.sh" . "$ORCH/stock-compiler.txt"
-
-        # CONFIG_LOCALVERSION := "" : the stock suffix now lives solely in the
-        # hardcoded kernel.release, so keep the defconfig from appending anything
-        # on top (single source of truth; also strips any -Sultan* branding).
-        if grep -q '^CONFIG_LOCALVERSION=' "$DEFCONFIG"; then
-            sed -i -E 's|^CONFIG_LOCALVERSION=".*"|CONFIG_LOCALVERSION=""|' "$DEFCONFIG"
-        else
-            echo 'CONFIG_LOCALVERSION=""' >> "$DEFCONFIG"
-        fi
-
-        # CONFIG_LOCALVERSION_AUTO OFF — else the git tree appends its own
-        # -g<hash>, breaking the 1:1 match.
-        sed -i -E '/^CONFIG_LOCALVERSION_AUTO=y/d' "$DEFCONFIG"
-        grep -q '^# CONFIG_LOCALVERSION_AUTO is not set' "$DEFCONFIG" \
-            || echo '# CONFIG_LOCALVERSION_AUTO is not set' >> "$DEFCONFIG"
-
-        # setlocalversion: never append the "+" dirty/untagged marker.
-        sed -i '/echo "+"$/d' scripts/setlocalversion || true
-
-        echo "=== uname-branding defconfig lines ==="
-        grep -nE '^CONFIG_LOCALVERSION|LOCALVERSION_AUTO' "$DEFCONFIG" || true
-
-        # Skip the generic tail defconfig appends (CONFIG_KSU=y etc.): the fragment
-        # already carries the correct KSU/SUSFS set. Also skip the AnyKernel clone
-        # at the bottom of this file — done inline here to include the A17 sed.
-        echo "== Clone AnyKernel3 + Android 17 supported.versions fixup =="
-        rm -rf AnyKernel
-        git clone --depth=1 https://github.com/Ante0/AnyKernel3 -b sultan-17-caimito AnyKernel
-        # SULTAN17 targets Android 17; upstream AnyKernel3 ships supported.versions=16.
-        sed -i 's/^supported\.versions=16$/supported.versions=16 17/' AnyKernel/anykernel.sh || true
-
-        # Replace upstream 32-bit ARM tools/busybox with vendored arm64 static.
-        # osm0sis AK3 ships a 32-bit ARM busybox; arm64-only flashers (Pixel 7 /
-        # app-based) abort "Busybox setup failed" before Image is written.
-        echo "== Drop in arm64 static busybox into AnyKernel/tools =="
-        cp "$KERNEL_REPO/zeromount/prebuilt/busybox-arm64" AnyKernel/tools/busybox
-        chmod 755 AnyKernel/tools/busybox
-
-        echo "$TARGET $VARIANT done"
-        exit 0
+        echo "$TARGET $VARIANT done (MINIMAL)"
         ;;
 esac
 
