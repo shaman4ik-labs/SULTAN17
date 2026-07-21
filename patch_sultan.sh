@@ -182,54 +182,62 @@ case "$VARIANT" in
 	echo "$TARGET $VARIANT done"
         ;;
     resukisu-zeromount)
-        # ===== MINIMAL FIRST BUILD (Option A) — pure ReSukiSU v4.1.0 + susfs 2.2.0 =====
-        # NOTHING of ours (no ZeroMount / stealth / gestures / uname spoof). Goal:
-        # prove the AUTHORS' base compiles + boots + gives WORKING Inline hook + root
-        # = Luminaire's base. Then re-add layer by layer: ZeroMount -> stealth ->
-        # gestures -> uname. Hook = CONFIG_KSU_SUSFS ("SUSFS Inline Hook" in ReSukiSU
-        # = Luminaire's "Hook type: Inline"), NOT the default tracepoint.
-        AV="android14"; KV="6.1"; KSU_DIR="KernelSU"
+        # ===== #14 LUMINAIRE-FAITHFUL BASE — mirror chainonyourdoor/LuminaireProtocol =====
+        # ReSukiSU main 930f61a + susfs be08face + blk.h-dance + fix_namespace.py.
+        # NO 51_/70_/ZeroMount/stealth/gestures/uname. Proves the fresh base compiles on
+        # Sultan (closes #12: fs/namespace.c undeclared = this exact missing fixup).
+        AV="android14"; KV="6.1"; KSU_DIR="$KERNEL_REPO/KernelSU"
+        LUM="$KERNEL_REPO/zeromount/luminaire"
         cd "$KERNEL_REPO"
+        SUBLEVEL=$(grep -E "^SUBLEVEL =" Makefile | awk '{print $3}')
+        echo "== kernel SUBLEVEL=$SUBLEVEL =="
 
-        echo "== ReSukiSU setup (clones ReSukiSU repo -> KernelSU/; its OWN hook) =="
-        curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s susfs-ksud
-        if [ ! -d "$KSU_DIR" ]; then echo "FATAL: ReSukiSU setup failed"; exit 1; fi
-        ( cd "$KSU_DIR" && git fetch --tags origin && git checkout 0d27e685cb9f1b873cd334371c0d8b6ea4c3aea9 )
-        echo "ReSukiSU pinned to v4.1.0 (0d27e685) = Luminaire's version"
-        # v4.1.0 detached-HEAD -> Kbuild version calc (git rev-list / GitHub API) yields
-        # EMPTY -DKSU_VERSION= -> supercalls.c:91 "expected expression before ',' token".
-        # Force real v4.1.0 version 34987 (= Luminaire). android-re §4.5.
+        echo "== ReSukiSU main HEAD 930f61a (Luminaire pin) =="
+        RS=$(curl -LSs --fail --retry 3 "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh") || { echo "FATAL setup dl"; exit 1; }
+        echo "$RS" | bash -s -- 930f61a654f35b98577e5da781fb30f9a1bc678b || { echo "FATAL setup"; exit 1; }
+        [ -d "$KSU_DIR" ] || { echo "FATAL: KernelSU dir missing"; exit 1; }
+        # main Kbuild = 30000+count+700; force 34987 (=Luminaire) for determinism vs shallow clone
         sed -i '/^ccflags-y += -DKSU_VERSION=\$(KSU_VERSION)/i KSU_VERSION := 34987' "$KSU_DIR"/kernel/Kbuild
-        grep -q "KSU_VERSION := 34987" "$KSU_DIR"/kernel/Kbuild && echo "KSU_VERSION forced -> 34987" || echo "WARN: KSU_VERSION sed missed - check Kbuild path"
+        grep -q "KSU_VERSION := 34987" "$KSU_DIR"/kernel/Kbuild && echo "KSU_VERSION -> 34987" || echo "WARN KSU_VERSION sed missed"
 
-        echo "== susfs 2.2.0 (upstream simonpunk + Ante0 tree-fix recipe, reject-tolerant) =="
-        git clone https://gitlab.com/simonpunk/susfs4ksu -b gki-android14-6.1 --depth=1
-        cp "$KERNEL_REPO"/susfs4ksu/kernel_patches/fs/* "$KERNEL_REPO"/fs/
-        cp "$KERNEL_REPO"/susfs4ksu/kernel_patches/include/linux/* "$KERNEL_REPO"/include/linux/
-        patch -p1 -F3 --no-backup-if-mismatch < "$KERNEL_REPO"/susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch || echo "50_ hunks failed (expected)"
-        ( cd "$KSU_DIR" && { patch -p1 -F3 --no-backup-if-mismatch < "$KERNEL_REPO"/susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || echo "10_enable hunks failed (expected)"; } )
-        patch -p1 < "$KERNEL_REPO"/kernel_patches/sultan/fixer.patch || true
-        for p in fix_Kbuild fix_init.c fix_kernel_umount.c; do
-            patch -p1 -F3 --no-backup-if-mismatch < "$KERNEL_REPO"/kernel_patches/next/susfs_fix_patches/v2.2.0/$p.patch || true
+        echo "== susfs be08face (susfs4ksu gki-android14-6.1) =="
+        SUSFS_DIR="$KERNEL_REPO/susfs4ksu"; rm -rf "$SUSFS_DIR"; mkdir -p "$SUSFS_DIR"
+        ( cd "$SUSFS_DIR"; git init -q; git remote add origin https://gitlab.com/simonpunk/susfs4ksu.git; \
+          git fetch --depth=1 origin be08face56c347e7ba9c4fb420c2463598a14f5d && git checkout -q FETCH_HEAD ) || {
+            echo "susfs SHA-fetch failed -> full clone fallback"; rm -rf "$SUSFS_DIR"; \
+            git clone -q -b gki-android14-6.1 https://gitlab.com/simonpunk/susfs4ksu.git "$SUSFS_DIR"; \
+            ( cd "$SUSFS_DIR" && git checkout -q be08face56c347e7ba9c4fb420c2463598a14f5d ); }
+        cp "$SUSFS_DIR"/kernel_patches/fs/susfs.c "$KERNEL_REPO"/fs/susfs.c
+        cp "$SUSFS_DIR"/kernel_patches/include/linux/susfs.h "$KERNEL_REPO"/include/linux/susfs.h
+        cp "$SUSFS_DIR"/kernel_patches/include/linux/susfs_def.h "$KERNEL_REPO"/include/linux/susfs_def.h
+
+        echo "== apply 50_ with blk.h-dance (sublevel>=157) =="
+        if [ "${SUBLEVEL:-0}" -ge 157 ]; then
+            sed -i '/^#include <trace\/hooks\/blk\.h>$/d' "$KERNEL_REPO"/fs/namespace.c
+        fi
+        patch -p1 --fuzz=3 --forward -d "$KERNEL_REPO" < "$SUSFS_DIR"/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch || echo "50_ some hunks failed (fix_namespace covers namespace.c)"
+        if [ "${SUBLEVEL:-0}" -ge 157 ] && ! grep -qF '#include <trace/hooks/blk.h>' "$KERNEL_REPO"/fs/namespace.c; then
+            sed -i '/^#include "internal\.h"$/a #include <trace\/hooks\/blk.h>' "$KERNEL_REPO"/fs/namespace.c
+            grep -qF '#include <trace/hooks/blk.h>' "$KERNEL_REPO"/fs/namespace.c || { echo "FATAL: blk.h restore failed"; exit 1; }
+        fi
+        find "$KERNEL_REPO" -name "*.rej" -delete 2>/dev/null || true
+
+        echo "== fix_namespace.py + kconfig (susfs decls) =="
+        python3 "$LUM"/fix_namespace.py "$KERNEL_REPO"/fs/namespace.c || { echo "FATAL fix_namespace"; exit 1; }
+        grep -q "^config KSU_SUSFS$" "$KSU_DIR"/kernel/Kconfig 2>/dev/null && echo "KSU_SUSFS declared by fork" || python3 "$LUM"/kconfig_inject.py "$KSU_DIR"/kernel/Kconfig
+
+        echo "== defconfig (KSU + KPM + susfs inline, target=$TARGET) =="
+        DC="$KERNEL_REPO/arch/arm64/configs/${TARGET}_defconfig"
+        for c in CONFIG_KSU=y CONFIG_KPM=y CONFIG_COMPAT=y \
+                 CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y \
+                 CONFIG_KSU_SUSFS_SUS_KSTAT=y CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y CONFIG_KSU_SUSFS_TRY_UMOUNT=y \
+                 CONFIG_KSU_SUSFS_SPOOF_UNAME=y CONFIG_KSU_SUSFS_ENABLE_LOG=y CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y \
+                 CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y CONFIG_KSU_SUSFS_OPEN_REDIRECT=y \
+                 CONFIG_KSU_SUSFS_SUS_MAP=y CONFIG_KSU_SUSFS_SUS_SU=y; do
+            grep -q "^$c" "$DC" || echo "$c" >> "$DC"
         done
-        patch -p1 < "$KERNEL_REPO"/kernel_patches/common/unicode_bypass_fix_6.1+.patch || true
-
-        echo "== defconfig: KSU + SUSFS Inline Hook, NO ZeroMount/stealth/uname =="
-        DEFCONFIG="$KERNEL_REPO/arch/arm64/configs/${TARGET}_defconfig"
-        add_cfg(){ grep -q "^$1=y" "$DEFCONFIG" || echo "$1=y" >> "$DEFCONFIG"; }
-        add_cfg CONFIG_KSU
-        add_cfg CONFIG_KSU_SUSFS
-        add_cfg CONFIG_KSU_SUSFS_SUS_PATH
-        add_cfg CONFIG_KSU_SUSFS_SUS_MOUNT
-        add_cfg CONFIG_KSU_SUSFS_SUS_KSTAT
-        add_cfg CONFIG_KSU_SUSFS_TRY_UMOUNT
-        add_cfg CONFIG_KSU_SUSFS_SPOOF_UNAME
-        add_cfg CONFIG_KSU_SUSFS_ENABLE_LOG
-        add_cfg CONFIG_KSU_SUSFS_OPEN_REDIRECT
-        add_cfg CONFIG_COMPAT
-        echo "== defconfig KSU/susfs lines =="; grep -E "^CONFIG_KSU" "$DEFCONFIG" | head -20
-
-        echo "$TARGET $VARIANT done (MINIMAL)"
+        grep -E "^CONFIG_KSU" "$DC" | head -20
+        echo "$TARGET $VARIANT done (LUMINAIRE-FAITHFUL #14)"
         ;;
 esac
 
