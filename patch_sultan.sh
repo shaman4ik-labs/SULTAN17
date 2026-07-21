@@ -237,7 +237,27 @@ case "$VARIANT" in
             grep -q "^$c" "$DC" || echo "$c" >> "$DC"
         done
         grep -E "^CONFIG_KSU" "$DC" | head -20
-        echo "$TARGET $VARIANT done (LUMINAIRE-FAITHFUL #14)"
+
+        # ===== ZeroMount layer (Luminaire kernel/addons/zeromount recipe) =====
+        # download upstream 60_ -> strip namei/readdir hunks (susfs-2.0.0-context) ->
+        # apply rest -> re-inject namei/readdir hooks on VANILLA anchors (susfs-agnostic)
+        # + fix_taskmmu scope. registry: zeromount REQUIRES susfs (have it). §4.6.
+        echo "== ZeroMount layer (strip+apply+anchor-inject) =="
+        ZMD="$KERNEL_REPO/zeromount/luminaire"
+        ZMP="/tmp/60_zeromount-android14-6.1.patch"
+        curl -fSL "https://raw.githubusercontent.com/Enginex0/Super-Builders/main/android14-6.1/ReSukiSU/patches/60_zeromount-android14-6.1.patch" -o "$ZMP" || { echo "FATAL: 60_ download"; exit 1; }
+        python3 "$ZMD"/strip_readdir_hunk.py "$ZMP" || { echo "FATAL: strip_readdir"; exit 1; }
+        python3 "$ZMD"/strip_namei_hunk.py  "$ZMP" || { echo "FATAL: strip_namei"; exit 1; }
+        patch -p1 --fuzz=3 --forward -d "$KERNEL_REPO" < "$ZMP" || { echo "FATAL: 60_ apply"; exit 1; }
+        rm -f "$ZMP"
+        python3 "$ZMD"/inject_namei.py   "$KERNEL_REPO"/fs/namei.c        || { echo "FATAL: inject_namei"; exit 1; }
+        python3 "$ZMD"/fix_taskmmu.py    "$KERNEL_REPO"/fs/proc/task_mmu.c || { echo "FATAL: fix_taskmmu"; exit 1; }
+        python3 "$ZMD"/inject_readdir.py "$KERNEL_REPO"/fs/readdir.c      || { echo "FATAL: inject_readdir"; exit 1; }
+        # 60_ injects CONFIG_ZEROMOUNT into gki_defconfig; ensure it in OUR target defconfig too
+        grep -q "^CONFIG_ZEROMOUNT=y" "$DC" || echo "CONFIG_ZEROMOUNT=y" >> "$DC"
+        echo "ZeroMount layer applied ✅"
+
+        echo "$TARGET $VARIANT done (LUMINAIRE + ZEROMOUNT #18)"
         ;;
 esac
 
