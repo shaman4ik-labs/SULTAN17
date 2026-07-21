@@ -196,6 +196,11 @@ case "$VARIANT" in
         if [ ! -d "$KSU_DIR" ]; then echo "FATAL: ReSukiSU setup failed"; exit 1; fi
         ( cd "$KSU_DIR" && git fetch --tags origin && git checkout 0d27e685cb9f1b873cd334371c0d8b6ea4c3aea9 )
         echo "ReSukiSU pinned to v4.1.0 (0d27e685) = Luminaire's version"
+        # v4.1.0 detached-HEAD -> Kbuild version calc (git rev-list / GitHub API) yields
+        # EMPTY -DKSU_VERSION= -> supercalls.c:91 "expected expression before ',' token".
+        # Force the manager's version code (40201 = SukiSU_v4.1.0_40201). android-re §4.5.
+        sed -i '/^ccflags-y += -DKSU_VERSION=\$(KSU_VERSION)/i KSU_VERSION := 40201' "$KSU_DIR"/kernel/Kbuild
+        grep -q "KSU_VERSION := 40201" "$KSU_DIR"/kernel/Kbuild && echo "KSU_VERSION forced -> 40201" || echo "WARN: KSU_VERSION sed missed - check Kbuild path"
 
         echo "== susfs 2.2.0 (upstream simonpunk + Ante0 tree-fix recipe, reject-tolerant) =="
         git clone https://gitlab.com/simonpunk/susfs4ksu -b gki-android14-6.1 --depth=1
