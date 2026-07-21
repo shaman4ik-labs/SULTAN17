@@ -196,9 +196,9 @@ case "$VARIANT" in
         RS=$(curl -LSs --fail --retry 3 "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh") || { echo "FATAL setup dl"; exit 1; }
         echo "$RS" | bash -s -- 930f61a654f35b98577e5da781fb30f9a1bc678b || { echo "FATAL setup"; exit 1; }
         [ -d "$KSU_DIR" ] || { echo "FATAL: KernelSU dir missing"; exit 1; }
-        # main Kbuild = 30000+count+700; force 34987 (=Luminaire) for determinism vs shallow clone
-        sed -i '/^ccflags-y += -DKSU_VERSION=\$(KSU_VERSION)/i KSU_VERSION := 34987' "$KSU_DIR"/kernel/Kbuild
-        grep -q "KSU_VERSION := 34987" "$KSU_DIR"/kernel/Kbuild && echo "KSU_VERSION -> 34987" || echo "WARN KSU_VERSION sed missed"
+        # main Kbuild = 30000+count+700; force 35018 (real 930f61a value: 30000+4318+700; matches 35018 spoofed manager)
+        sed -i '/^ccflags-y += -DKSU_VERSION=\$(KSU_VERSION)/i KSU_VERSION := 35018' "$KSU_DIR"/kernel/Kbuild
+        grep -q "KSU_VERSION := 35018" "$KSU_DIR"/kernel/Kbuild && echo "KSU_VERSION -> 35018" || echo "WARN KSU_VERSION sed missed"
         # ReSukiSU main enforces abi_gki_protected_exports (static_export_check.mk) -> remove (Luminaire core/protected_exports.sh)
         rm -rf "$KERNEL_REPO"/android/abi_gki_protected_exports_* 2>/dev/null || true
         echo "protected exports removed"
