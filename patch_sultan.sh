@@ -198,9 +198,9 @@ case "$VARIANT" in
         echo "ReSukiSU pinned to v4.1.0 (0d27e685) = Luminaire's version"
         # v4.1.0 detached-HEAD -> Kbuild version calc (git rev-list / GitHub API) yields
         # EMPTY -DKSU_VERSION= -> supercalls.c:91 "expected expression before ',' token".
-        # Force the manager's version code (40201 = SukiSU_v4.1.0_40201). android-re §4.5.
-        sed -i '/^ccflags-y += -DKSU_VERSION=\$(KSU_VERSION)/i KSU_VERSION := 40201' "$KSU_DIR"/kernel/Kbuild
-        grep -q "KSU_VERSION := 40201" "$KSU_DIR"/kernel/Kbuild && echo "KSU_VERSION forced -> 40201" || echo "WARN: KSU_VERSION sed missed - check Kbuild path"
+        # Force real v4.1.0 version 34987 (= Luminaire). android-re §4.5.
+        sed -i '/^ccflags-y += -DKSU_VERSION=\$(KSU_VERSION)/i KSU_VERSION := 34987' "$KSU_DIR"/kernel/Kbuild
+        grep -q "KSU_VERSION := 34987" "$KSU_DIR"/kernel/Kbuild && echo "KSU_VERSION forced -> 34987" || echo "WARN: KSU_VERSION sed missed - check Kbuild path"
 
         echo "== susfs 2.2.0 (upstream simonpunk + Ante0 tree-fix recipe, reject-tolerant) =="
         git clone https://gitlab.com/simonpunk/susfs4ksu -b gki-android14-6.1 --depth=1
@@ -262,4 +262,4 @@ fi
 
 ##fetch anykernel
 cd "$KERNEL_REPO"
-git clone --depth=1 https://github.com/Ante0/AnyKernel3 -b sultan-17-caimito AnyKernel
+git clone --depth=1 https://github.com/Ante0/AnyKernel3 -b sultan-17-${TARGET} AnyKernel
