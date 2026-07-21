@@ -199,14 +199,13 @@ case "$VARIANT" in
         # main Kbuild = 30000+count+700; force 34987 (=Luminaire) for determinism vs shallow clone
         sed -i '/^ccflags-y += -DKSU_VERSION=\$(KSU_VERSION)/i KSU_VERSION := 34987' "$KSU_DIR"/kernel/Kbuild
         grep -q "KSU_VERSION := 34987" "$KSU_DIR"/kernel/Kbuild && echo "KSU_VERSION -> 34987" || echo "WARN KSU_VERSION sed missed"
+        # ReSukiSU main enforces abi_gki_protected_exports (static_export_check.mk) -> remove (Luminaire core/protected_exports.sh)
+        rm -rf "$KERNEL_REPO"/android/abi_gki_protected_exports_* 2>/dev/null || true
+        echo "protected exports removed"
 
-        echo "== susfs be08face (susfs4ksu gki-android14-6.1) =="
-        SUSFS_DIR="$KERNEL_REPO/susfs4ksu"; rm -rf "$SUSFS_DIR"; mkdir -p "$SUSFS_DIR"
-        ( cd "$SUSFS_DIR"; git init -q; git remote add origin https://gitlab.com/simonpunk/susfs4ksu.git; \
-          git fetch --depth=1 origin be08face56c347e7ba9c4fb420c2463598a14f5d && git checkout -q FETCH_HEAD ) || {
-            echo "susfs SHA-fetch failed -> full clone fallback"; rm -rf "$SUSFS_DIR"; \
-            git clone -q -b gki-android14-6.1 https://gitlab.com/simonpunk/susfs4ksu.git "$SUSFS_DIR"; \
-            ( cd "$SUSFS_DIR" && git checkout -q be08face56c347e7ba9c4fb420c2463598a14f5d ); }
+        echo "== susfs (susfs4ksu gki-android14-6.1 tip = 2.2.0, proven clone like #10/#13) =="
+        SUSFS_DIR="$KERNEL_REPO/susfs4ksu"; rm -rf "$SUSFS_DIR"
+        git clone -q --depth=1 -b gki-android14-6.1 https://gitlab.com/simonpunk/susfs4ksu.git "$SUSFS_DIR" || { echo "FATAL susfs clone"; exit 1; }
         cp "$SUSFS_DIR"/kernel_patches/fs/susfs.c "$KERNEL_REPO"/fs/susfs.c
         cp "$SUSFS_DIR"/kernel_patches/include/linux/susfs.h "$KERNEL_REPO"/include/linux/susfs.h
         cp "$SUSFS_DIR"/kernel_patches/include/linux/susfs_def.h "$KERNEL_REPO"/include/linux/susfs_def.h
