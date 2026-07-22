@@ -259,6 +259,64 @@ case "$VARIANT" in
         grep -q "^CONFIG_ZEROMOUNT=y" "$DC" || echo "CONFIG_ZEROMOUNT=y" >> "$DC"
         echo "ZeroMount layer applied ✅"
 
+        # ===== Droidspaces LXC-container enablement (Luminaire kernel/addons/droidspaces) =====
+        # KERNEL-SIDE ONLY. KABI-safe SYSVIPC via reserved padding slots 6/7/8 (patch touches
+        # ONLY include/linux/sched.h) + namespace/cgroup/binfmt configs the Sultan tree strips.
+        # Additive: does not touch susfs/ZeroMount/uname. Moves config TOWARD stock (less sus,
+        # not more). Userspace runtime (ravindu644/Droidspaces-OSS + LXC rootfs) = separate track.
+        # Fail-hard: SYSVIPC=y WITHOUT the KaBI patch shifts task_struct → breaks vendor modules.
+        echo "== Droidspaces: SYSVIPC KaBI padding patch + LXC configs =="
+        DSP="/tmp/droidspaces_sysvipc_kabi.patch"
+        cat > "$DSP" << 'DROIDSPACES_KABI_EOF'
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+index b275cd285182..f03e0d5e49c1 100644
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -1074,8 +1074,8 @@ struct task_struct {
+ 	struct nameidata		*nameidata;
+
+ #ifdef CONFIG_SYSVIPC
+-	struct sysv_sem			sysvsem;
+-	struct sysv_shm			sysvshm;
++	// struct sysv_sem			sysvsem;
++	// struct sysv_shm			sysvshm;
+ #endif
+ #ifdef CONFIG_DETECT_HUNG_TASK
+ 	unsigned long			last_switch_count;
+@@ -1513,9 +1513,15 @@ struct task_struct {
+ 	ANDROID_KABI_RESERVE(3);
+ 	ANDROID_KABI_RESERVE(4);
+ 	ANDROID_KABI_RESERVE(5);
++
++#ifdef CONFIG_SYSVIPC
++	ANDROID_KABI_USE(6, struct sysv_sem sysvsem);
++	_ANDROID_KABI_REPLACE(ANDROID_KABI_RESERVE(7); ANDROID_KABI_RESERVE(8), struct sysv_shm sysvshm);
++#else
+ 	ANDROID_KABI_RESERVE(6);
+ 	ANDROID_KABI_RESERVE(7);
+ 	ANDROID_KABI_RESERVE(8);
++#endif
+
+ 	/*
+ 	 * New fields for task_struct should be added above here, so that
+DROIDSPACES_KABI_EOF
+        if patch -p1 --fuzz=3 --dry-run --reverse -d "$KERNEL_REPO" < "$DSP" >/dev/null 2>&1; then
+            echo "Droidspaces: KaBI patch already applied ✅"
+        elif patch -p1 --fuzz=3 --dry-run --forward -d "$KERNEL_REPO" < "$DSP" >/dev/null 2>&1; then
+            patch -p1 --fuzz=3 -d "$KERNEL_REPO" < "$DSP" || { echo "FATAL: Droidspaces KaBI patch apply failed"; exit 1; }
+            echo "Droidspaces: KaBI patch applied ✅"
+        else
+            echo "FATAL: Droidspaces KaBI patch does not apply cleanly (sched.h context drift) — aborting to avoid KaBI violation"; exit 1
+        fi
+        rm -f "$DSP"
+        for c in CONFIG_SYSVIPC=y CONFIG_PID_NS=y CONFIG_IPC_NS=y CONFIG_UTS_NS=y \
+                 CONFIG_DEVTMPFS=y CONFIG_CGROUP_DEVICE=y \
+                 CONFIG_NET_NS=y CONFIG_NETFILTER_XT_TARGET_LOG=y CONFIG_NETFILTER_XT_MATCH_RECENT=y \
+                 CONFIG_BINFMT_ELF=y CONFIG_BINFMT_SCRIPT=y; do
+            grep -q "^$c" "$DC" || echo "$c" >> "$DC"
+        done
+        echo "Droidspaces configs enabled ✅ (uts/ipc/pid-ns + SYSVIPC now present)"
+
         # ===== native uname/compiler stock spoof (build-time; runtime SPOOF_UNAME is a no-op here) =====
         # native-157 overrides UTS_RELEASE -> uname/osrelease/proc-version/vermagic all become the
         # stock 6.1.157 string (SUBLEVEL untouched → version-gated code compiles native). + GCC banner.
