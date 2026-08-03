@@ -198,7 +198,7 @@ case "$VARIANT" in
         [ -d "$KSU_DIR" ] || { echo "FATAL: KernelSU dir missing"; exit 1; }
         # main Kbuild = 30000+count+700; force 35046 (59c99fdf = ReSukiSU main HEAD 2026-08-02, 30000+4346+700=35046; matches 35046 manager)
         sed -i '/^ccflags-y += -DKSU_VERSION=\$(KSU_VERSION)/i KSU_VERSION := 35046' "$KSU_DIR"/kernel/Kbuild
-        grep -q "KSU_VERSION := 35046" "$KSU_DIR"/kernel/Kbuild && echo "KSU_VERSION -> 35019" || echo "WARN KSU_VERSION sed missed"
+        grep -q "KSU_VERSION := 35046" "$KSU_DIR"/kernel/Kbuild && echo "KSU_VERSION -> 35046" || echo "WARN KSU_VERSION sed missed"
         # ReSukiSU main enforces abi_gki_protected_exports (static_export_check.mk) -> remove (Luminaire core/protected_exports.sh)
         rm -rf "$KERNEL_REPO"/android/abi_gki_protected_exports_* 2>/dev/null || true
         echo "protected exports removed"
