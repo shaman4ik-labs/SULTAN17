@@ -192,13 +192,17 @@ case "$VARIANT" in
         SUBLEVEL=$(grep -E "^SUBLEVEL =" Makefile | awk '{print $3}')
         echo "== kernel SUBLEVEL=$SUBLEVEL =="
 
-        echo "== ReSukiSU main HEAD 930f61a (Luminaire pin) =="
+        echo "== ReSukiSU pin from zeromount/resukisu-pin.txt =="
+        PIN="$(cat "$ORCH/resukisu-pin.txt")"
         RS=$(curl -LSs --fail --retry 3 "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh") || { echo "FATAL setup dl"; exit 1; }
-        echo "$RS" | bash -s -- 829f61fb008c895841b98aca5833c18daae6f145 || { echo "FATAL setup"; exit 1; }
+        echo "$RS" | bash -s -- "$PIN" || { echo "FATAL setup"; exit 1; }
         [ -d "$KSU_DIR" ] || { echo "FATAL: KernelSU dir missing"; exit 1; }
-        # main Kbuild = 30000+count+700; force 35072 (829f61fb = ReSukiSU main HEAD 2026-08-16, 30000+4372+700=35072; matches 35072 manager)
-        sed -i '/^ccflags-y += -DKSU_VERSION=\$(KSU_VERSION)/i KSU_VERSION := 35072' "$KSU_DIR"/kernel/Kbuild
-        grep -q "KSU_VERSION := 35072" "$KSU_DIR"/kernel/Kbuild && echo "KSU_VERSION -> 35072" || echo "WARN KSU_VERSION sed missed"
+        # Manager handshake: Kbuild is 30000+rev-list+700. Shallow clone yields ~30700
+        # and the manager refuses Superuser. Unshallow, then last := before -DKSU_VERSION=.
+        ( cd "$KSU_DIR" && { [ -f .git/shallow ] && git fetch --unshallow || true; } )
+        KSU_VER=$((30000 + $(git -C "$KSU_DIR" rev-list --count HEAD) + 700))
+        sed -i "/^ccflags-y += -DKSU_VERSION=\$(KSU_VERSION)/i KSU_VERSION := ${KSU_VER}" "$KSU_DIR"/kernel/Kbuild
+        grep -q "KSU_VERSION := ${KSU_VER}" "$KSU_DIR"/kernel/Kbuild && echo "KSU_VERSION -> ${KSU_VER}" || echo "WARN KSU_VERSION sed missed"
         # ReSukiSU main enforces abi_gki_protected_exports (static_export_check.mk) -> remove (Luminaire core/protected_exports.sh)
         rm -rf "$KERNEL_REPO"/android/abi_gki_protected_exports_* 2>/dev/null || true
         echo "protected exports removed"
