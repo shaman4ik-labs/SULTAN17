@@ -63,6 +63,11 @@ jobs:
         run: |
           ./build_sultan.sh ${{ matrix.target }}
 
+      - name: Verify netfilter TPROXY / ip6 NAT
+        run: |
+          CFG=out/.config; [ -f "$CFG" ] || CFG=.config
+          bash zeromount/build-helpers/inject-netfilter-tproxy.sh --verify "$CFG"
+
       - name: Upload ZIP
         uses: actions/upload-artifact@v4
         with:

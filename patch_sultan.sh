@@ -243,6 +243,9 @@ case "$VARIANT" in
         done
         grep -E "^CONFIG_KSU" "$DC" | head -20
 
+        echo "== netfilter TPROXY / ip6 NAT (force =y, never TUN) =="
+        bash "$HELPERS/inject-netfilter-tproxy.sh" "$DC" || { echo "FATAL netfilter tproxy inject"; exit 1; }
+
         # ===== ZeroMount layer (Luminaire kernel/addons/zeromount recipe) =====
         # download upstream 60_ -> strip namei/readdir hunks (susfs-2.0.0-context) ->
         # apply rest -> re-inject namei/readdir hooks on VANILLA anchors (susfs-agnostic)
@@ -358,6 +361,12 @@ if ! grep -q "^CONFIG_COMPAT=y$" "$DEFCONFIG"; then
         echo "CONFIG_COMPAT=y" >> "$DEFCONFIG"
 fi
 
+# Re-force after every later defconfig append so assemble/olddefconfig
+# cannot drop TPROXY / IP6_NF_NAT. resukisu-zeromount only.
+if [ "$VARIANT" = "resukisu-zeromount" ]; then
+        echo "== netfilter TPROXY / ip6 NAT (re-force after defconfig mutations) =="
+        bash "$HELPERS/inject-netfilter-tproxy.sh" "$DEFCONFIG" || { echo "FATAL netfilter tproxy re-force"; exit 1; }
+fi
 
 ##fetch anykernel
 cd "$KERNEL_REPO"
