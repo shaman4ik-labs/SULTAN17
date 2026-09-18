@@ -183,9 +183,9 @@ case "$VARIANT" in
         ;;
     resukisu-zeromount)
         # ===== #14 LUMINAIRE-FAITHFUL BASE — mirror chainonyourdoor/LuminaireProtocol =====
-        # ReSukiSU main 930f61a + susfs be08face + blk.h-dance + fix_namespace.py.
-        # NO 51_/70_/ZeroMount/stealth/gestures/uname. Proves the fresh base compiles on
-        # Sultan (closes #12: fs/namespace.c undeclared = this exact missing fixup).
+        # ReSukiSU from resukisu-pin.txt + susfs from susfs-pin.txt (SHA, never clone tip).
+        # #14 pinned susfs be08face (v2.2.0). #15 dropped SHA → floating tip → dest 2.3.0 by accident.
+        # This bake: same #14 method, susfs-pin.txt = 273ae36 (v2.3.0). NO 71_ uid_t (2.3 loop is static + extra_works).
         AV="android14"; KV="6.1"; KSU_DIR="$KERNEL_REPO/KernelSU"
         LUM="$KERNEL_REPO/zeromount/luminaire"
         cd "$KERNEL_REPO"
@@ -207,9 +207,22 @@ case "$VARIANT" in
         rm -rf "$KERNEL_REPO"/android/abi_gki_protected_exports_* 2>/dev/null || true
         echo "protected exports removed"
 
-        echo "== susfs (susfs4ksu gki-android14-6.1 tip = 2.2.0, proven clone like #10/#13) =="
+        echo "== susfs pin from zeromount/susfs-pin.txt (SHA, not tip) =="
+        SUSFS_PIN="$(tr -d '[:space:]' < "$ORCH/susfs-pin.txt")"
+        [ -n "$SUSFS_PIN" ] || { echo "FATAL: empty susfs-pin.txt"; exit 1; }
         SUSFS_DIR="$KERNEL_REPO/susfs4ksu"; rm -rf "$SUSFS_DIR"
-        git clone -q --depth=1 -b gki-android14-6.1 https://gitlab.com/simonpunk/susfs4ksu.git "$SUSFS_DIR" || { echo "FATAL susfs clone"; exit 1; }
+        # Full clone + checkout SHA. #15 used --depth=1 tip because gitlab shallow-SHA fetch failed.
+        git clone -q -b gki-android14-6.1 https://gitlab.com/simonpunk/susfs4ksu.git "$SUSFS_DIR" || { echo "FATAL susfs clone"; exit 1; }
+        ( cd "$SUSFS_DIR" && git checkout -q "$SUSFS_PIN" ) || { echo "FATAL: susfs pin $SUSFS_PIN not on gki-android14-6.1"; exit 1; }
+        GOT="$(git -C "$SUSFS_DIR" rev-parse HEAD)"
+        [ "$GOT" = "$SUSFS_PIN" ] || { echo "FATAL: susfs HEAD $GOT != pin $SUSFS_PIN"; exit 1; }
+        SUSFS_VER="$(grep -E '^#define SUSFS_VERSION' "$SUSFS_DIR"/kernel_patches/include/linux/susfs.h | head -1)"
+        echo "SUSFS pinned $GOT $SUSFS_VER"
+        echo "$SUSFS_VER" | grep -q 'v2.3.0' || { echo "FATAL: expected SUSFS_VERSION v2.3.0, got $SUSFS_VER"; exit 1; }
+        grep -q 'susfs_run_extra_works' "$SUSFS_DIR"/kernel_patches/fs/susfs.c || { echo "FATAL: extra_works missing in pinned susfs.c"; exit 1; }
+        grep -q 'static void susfs_run_sus_path_loop' "$SUSFS_DIR"/kernel_patches/fs/susfs.c || { echo "FATAL: static path_loop missing in pinned susfs.c"; exit 1; }
+        P50="$SUSFS_DIR/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch"
+        [ -s "$P50" ] || { echo "FATAL: missing $P50 on pin $SUSFS_PIN"; exit 1; }
         cp "$SUSFS_DIR"/kernel_patches/fs/susfs.c "$KERNEL_REPO"/fs/susfs.c
         cp "$SUSFS_DIR"/kernel_patches/include/linux/susfs.h "$KERNEL_REPO"/include/linux/susfs.h
         cp "$SUSFS_DIR"/kernel_patches/include/linux/susfs_def.h "$KERNEL_REPO"/include/linux/susfs_def.h
@@ -218,7 +231,7 @@ case "$VARIANT" in
         if [ "${SUBLEVEL:-0}" -ge 157 ]; then
             sed -i '/^#include <trace\/hooks\/blk\.h>$/d' "$KERNEL_REPO"/fs/namespace.c
         fi
-        patch -p1 --fuzz=3 --forward -d "$KERNEL_REPO" < "$SUSFS_DIR"/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch || echo "50_ some hunks failed (fix_namespace covers namespace.c)"
+        patch -p1 --fuzz=3 --forward -d "$KERNEL_REPO" < "$P50" || echo "50_ some hunks failed (fix_namespace covers namespace.c)"
         if [ "${SUBLEVEL:-0}" -ge 157 ] && ! grep -qF '#include <trace/hooks/blk.h>' "$KERNEL_REPO"/fs/namespace.c; then
             sed -i '/^#include "internal\.h"$/a #include <trace\/hooks\/blk.h>' "$KERNEL_REPO"/fs/namespace.c
             grep -qF '#include <trace/hooks/blk.h>' "$KERNEL_REPO"/fs/namespace.c || { echo "FATAL: blk.h restore failed"; exit 1; }
