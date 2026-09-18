@@ -259,6 +259,24 @@ case "$VARIANT" in
         echo "== netfilter TPROXY / ip6 NAT (force =y, never TUN) =="
         bash "$HELPERS/inject-netfilter-tproxy.sh" "$DC" || { echo "FATAL netfilter tproxy inject"; exit 1; }
 
+        # 2.3.0 loop is static + extra_works (async). flush_work makes inode
+        # AS_FLAGS_SUS_PATH land before the app's first File.exists — 47167aa7 timing
+        # without calling (uid_t) path_loop (that ABI is 2.0; 71_ uid_t bake failed).
+        echo "== Apply 71_ flush_work(susfs_extra_works) on umount+setuid =="
+        P71="$PATCHES/71_resukisu-flush-extra-works-6.1.patch"
+        [ -s "$P71" ] || { echo "FATAL: missing $P71"; exit 1; }
+        ( cd "$KSU_DIR" && {
+            if grep -q 'flush_work(&susfs_extra_works)' kernel/feature/kernel_umount.c 2>/dev/null; then
+                echo "71_: flush_work already present — skip"
+            else
+                patch -p1 --no-backup-if-mismatch < "$P71" || { echo "FATAL: 71_ flush_work apply"; exit 1; }
+            fi
+            grep -q 'flush_work(&susfs_extra_works)' kernel/feature/kernel_umount.c \
+              && grep -q 'flush_work(&susfs_extra_works)' kernel/hook/setuid_hook.c \
+              || { echo "FATAL: 71_ flush_work not in umount/setuid after patch"; exit 1; }
+            echo "71_: flush_work verified in kernel_umount.c and setuid_hook.c"
+        } )
+
         # ===== ZeroMount layer (Luminaire kernel/addons/zeromount recipe) =====
         # download upstream 60_ -> strip namei/readdir hunks (susfs-2.0.0-context) ->
         # apply rest -> re-inject namei/readdir hooks on VANILLA anchors (susfs-agnostic)
