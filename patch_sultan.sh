@@ -246,6 +246,29 @@ case "$VARIANT" in
         echo "== netfilter TPROXY / ip6 NAT (force =y, never TUN) =="
         bash "$HELPERS/inject-netfilter-tproxy.sh" "$DC" || { echo "FATAL netfilter tproxy inject"; exit 1; }
 
+        # 71_: ReSukiSU c04159fc dropped susfs_run_sus_path_loop() from ksu_handle_umount.
+        # 50_ still defines it; without this call --loop paths never run (Duck sees ksud).
+        # Isolated hunk only — success path, before revert_creds, while ksu_cred.
+        echo "== Apply 71_ (susfs_run_sus_path_loop in ksu_handle_umount, while ksu_cred) =="
+        P71="$PATCHES/71_resukisu-susfs-path-loop-${KV}.patch"
+        ( cd "$KSU_DIR" && {
+            if [ ! -s "$P71" ]; then
+                echo "FATAL: missing $P71"
+                exit 1
+            elif [ -f kernel/feature/kernel_umount.c ]; then
+                if grep -q 'susfs_run_sus_path_loop' kernel/feature/kernel_umount.c; then
+                    echo "71_: feature/kernel_umount.c already calls susfs_run_sus_path_loop — skip"
+                else
+                    patch -p1 --no-backup-if-mismatch < "$P71" || { echo "FATAL: 71_ apply"; exit 1; }
+                fi
+            elif [ -f kernel/kernel_umount.c ] && grep -q 'susfs_run_sus_path_loop' kernel/kernel_umount.c; then
+                echo "71_: pin already calls loop in kernel/kernel_umount.c (47167aa7-era) — skip"
+            else
+                echo "FATAL: 71_ needs KernelSU kernel/feature/kernel_umount.c (post-4.2)"
+                exit 1
+            fi
+        } )
+
         # ===== ZeroMount layer (Luminaire kernel/addons/zeromount recipe) =====
         # download upstream 60_ -> strip namei/readdir hunks (susfs-2.0.0-context) ->
         # apply rest -> re-inject namei/readdir hooks on VANILLA anchors (susfs-agnostic)
