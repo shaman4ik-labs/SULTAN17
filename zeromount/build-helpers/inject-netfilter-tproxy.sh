@@ -35,11 +35,12 @@ SYMS_Y=(
   CONFIG_IP_ADVANCED_ROUTER=y
   CONFIG_IP_MULTIPLE_TABLES=y
   CONFIG_IPV6_MULTIPLE_TABLES=y
+  # VpnService (Surfshark). Compass stays TPROXY/REDIRECT, not this TUN.
+  CONFIG_TUN=y
 )
 
-# Must stay off: TUN for apps / VpnService lookalikes.
+# CONFIG_VPN is unused by Compass; leave unset (not the tun char device).
 SYMS_N=(
-  CONFIG_TUN
   CONFIG_VPN
 )
 
