@@ -367,9 +367,9 @@ DROIDSPACES_KABI_EOF
         # ===== native uname/compiler stock spoof (build-time; runtime SPOOF_UNAME is a no-op here) =====
         # native-157 overrides UTS_RELEASE -> uname/osrelease/proc-version/vermagic all become the
         # stock 6.1.157 string (SUBLEVEL untouched → version-gated code compiles native). + GCC banner.
-        echo "== native-157 uname + native-compiler (stock 1:1) =="
-        bash "$KERNEL_REPO/zeromount/build-helpers/native-157.sh" "$KERNEL_REPO" || { echo "FATAL native-157"; exit 1; }
-        bash "$KERNEL_REPO/zeromount/build-helpers/native-compiler.sh" "$KERNEL_REPO" "$KERNEL_REPO/zeromount/stock-compiler.txt" || echo "native-compiler failed (non-fatal)"
+        # uname-spoofing DISABLED by operator 2026-10-18: honest UTS_RELEASE/vermagic.
+        # bash "$KERNEL_REPO/zeromount/build-helpers/native-157.sh" "$KERNEL_REPO" || { echo "FATAL native-157"; exit 1; }
+        # bash "$KERNEL_REPO/zeromount/build-helpers/native-compiler.sh" "$KERNEL_REPO" "$KERNEL_REPO/zeromount/stock-compiler.txt" || echo "native-compiler failed (non-fatal)"
 
         echo "$TARGET $VARIANT done (LUMINAIRE + ZEROMOUNT + native-157 #24)"
         ;;
