@@ -194,7 +194,7 @@ case "$VARIANT" in
 
         case "$VARIANT" in
             bakasu-zeromount)
-                # BakaSU = форк ReSukiSU (тот же автор), живая линия. Механика setup.sh идентична.
+                # BakaSU = форк ReSukiSU (тот же автор). Пин 5b76b88 = последний ДО suspend-susfs (48fa4bb 10.10 "kernel: suspend susfs build" ставит $(error) до выхода susfs-обновления от simonpunk). 
                 PIN_FILE="$ORCH/bakasu-pin.txt"; SU_NAME=BakaSU
                 SETUP_URL="https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh";;
             *)
