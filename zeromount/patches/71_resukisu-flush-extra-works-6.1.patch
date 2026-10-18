@@ -1,0 +1,28 @@
+--- a/kernel/feature/kernel_umount.c
++++ b/kernel/feature/kernel_umount.c
+@@ -16,6 +16,7 @@
+ 
+ #ifdef CONFIG_KSU_SUSFS
+ #include <linux/susfs_def.h>
++#include <linux/workqueue.h>
+ #endif // #ifdef CONFIG_KSU_SUSFS
+ 
+ #include "feature/kernel_umount.h"
+@@ -170,6 +171,7 @@
+ #ifdef CONFIG_KSU_SUSFS
+     if (!work_pending(&susfs_extra_works))
+         schedule_work(&susfs_extra_works);
++    flush_work(&susfs_extra_works);
+     susfs_set_current_proc_umounted();
+ #endif
+ 
+--- a/kernel/hook/setuid_hook.c
++++ b/kernel/hook/setuid_hook.c
+@@ -124,6 +124,7 @@
+     // Handle extra susfs work
+     if (!work_pending(&susfs_extra_works))
+         schedule_work(&susfs_extra_works);
++    flush_work(&susfs_extra_works);
+ }
+ 
+     return 0;
